@@ -1,0 +1,21 @@
+# Context excludes for the APPLICATION image build (docker build . in the cloud).
+# Keeps the pinqops tooling, docs, and VCS metadata out of your app image.
+.git
+.github
+.gitmodules
+.pinq-doq
+.claude
+src
+tests
+docs
+examples
+deploy
+*.sln
+global.json
+bin
+obj
+**/bin
+**/obj
+*.md
+.editorconfig
+.gitignore

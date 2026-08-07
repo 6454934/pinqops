@@ -1,0 +1,71 @@
+name: Auto Release
+
+# Cuts the next patch release by itself, so a fix that is merged is a fix that a
+# server can install: `pinqops-ui update` downloads the latest GitHub Release, and
+# without a release, master's changes never reach anyone.
+#
+# Three deliberate choices:
+#
+#  * It hangs off CI rather than off the push, so a commit that does not build (or
+#    whose tests fail) is never published — the release workflow only publishes,
+#    it does not test.
+#  * The sleep plus `cancel-in-progress` debounces a burst of commits into one
+#    release. Releasing per push was tried before and left cancelled runs behind
+#    when hosted runners could not be acquired; this keeps the busiest session to
+#    a single build.
+#  * It dispatches the Release workflow instead of pushing a tag: a tag pushed
+#    with GITHUB_TOKEN does not trigger workflows, whereas a workflow_dispatch
+#    from it does — and no personal access token has to exist for this to work.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: read
+  actions: write # dispatch the Release workflow
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the commit CI passed on
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0 # full history + tags, to compute the next version
+
+      - name: Debounce a burst of commits
+        # A newer CI success cancels this run, so only the last commit of a
+        # session gets released instead of every commit in it.
+        run: sleep 90
+
+      - name: Release the next patch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Already released: a re-run of CI on the same commit must not produce a
+          # second release of it.
+          if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
+            echo "$(git describe --exact-match --tags HEAD) already names this commit; nothing to release"
+            exit 0
+          fi
+
+          latest="$(git tag --list 'v*' | sort -V | tail -n1)"
+          if ! printf '%s' "${latest#v}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::cannot read a semver from the latest tag ('$latest')"
+            exit 1
+          fi
+
+          IFS='.' read -r major minor patch <<< "${latest#v}"
+          next="$major.$minor.$((patch + 1))"
+          echo "latest is $latest, releasing v$next"
+          gh workflow run release.yml -f version="$next"

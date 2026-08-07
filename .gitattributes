@@ -1,0 +1,21 @@
+# Normalize line endings to LF on checkout and commit (matches .editorconfig).
+* text=auto eol=lf
+
+# Shell scripts and Dockerfiles must be LF.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+
+# Treat known binaries as binary (never normalize).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.gz binary
+*.zip binary
+
+# GitHub Linguist hints: keep vendored / generated content out of language stats.
+.pinq-doq/** linguist-vendored
+.claude/** linguist-generated
+docs/** linguist-documentation

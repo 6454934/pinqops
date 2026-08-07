@@ -1,0 +1,46 @@
+name: CodeQL
+
+# Static analysis of the C# in src/ and tests/. Runs on pull requests so a
+# finding shows up on the PR that introduced it, plus weekly — most of what
+# CodeQL adds over time comes from new queries against unchanged code, which
+# only a scheduled run will surface. Not on every master push: a cancelled
+# hosted-runner wait is worse signal than silence on a direct push.
+on:
+  pull_request:
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload the SARIF results
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          # security-extended adds the lower-confidence security queries. This is
+          # a tool that holds Docker-daemon access and other people's tokens, so
+          # the extra noise is worth reviewing.
+          queries: security-extended
+
+      # Build by hand rather than with autobuild: the solution pins the SDK in
+      # global.json and autobuild's guess has no reason to match.
+      - name: Build
+        run: dotnet build -c Release
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@v3

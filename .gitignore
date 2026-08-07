@@ -1,0 +1,30 @@
+# The self-hosted runner is installed on the server, outside this repo. If you
+# ever unpack it inside the tree by accident, keep it out of version control.
+actions-runner/
+
+# .NET build output
+bin/
+obj/
+# `dotnet test --logger trx` drops a several-thousand-line report per run here.
+TestResults/
+[Bb]in/
+[Oo]bj/
+*.user
+
+# Publish output
+publish/
+artifacts/
+
+# Local environment overrides (should never be committed).
+.env
+**/.env
+
+# Local Claude Code working dir. The canonical standards live in the .pinq-doq
+# submodule; .claude/ is generated locally by pinq-doq's deliver script and is
+# not published (it also holds per-developer settings.local.json).
+.claude/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp

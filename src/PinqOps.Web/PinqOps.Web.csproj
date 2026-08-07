@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PinqOps.Web</RootNamespace>
+    <AssemblyName>pinqops-ui</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Publish a single-file, self-contained linux-x64 binary from CI (see release.yml). -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The dashboard is a single HTML file embedded into the binary, so the
+         published pinqops-ui stays one self-contained file. -->
+    <EmbeddedResource Include="wwwroot/index.html" LogicalName="index.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PinqOps.Core\PinqOps.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The WebApplicationFactory-based authorization tests drive the real Program. -->
+    <InternalsVisibleTo Include="PinqOps.Web.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,14 @@
+# Reference application Dockerfile.
+#
+# The deploy system is Dockerfile-agnostic: it builds whatever Dockerfile lives
+# at the repository root. This file is only an example of what YOUR application
+# Dockerfile might look like. Copy/adapt it to the repository root as
+# `Dockerfile` (or provide your own).
+#
+# The GitHub Actions workflow (.github/workflows/deploy.yml) runs:
+#   docker build -t ghcr.io/<owner>/<repo>:latest .
+
+# ---- example: a static site served by a tiny web server ----
+FROM nginx:alpine
+COPY public/ /usr/share/nginx/html/
+EXPOSE 80

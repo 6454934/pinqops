@@ -1,0 +1,132 @@
+name: Release
+
+# Cuts a release: self-contained linux-x64 binaries (`pinqops` CLI + optional
+# `pinqops-ui` dashboard) are built with the version stamped in, and the release
+# action creates the tag. Trigger by pushing a v* tag or by workflow_dispatch.
+# Master pushes do not trigger this directly — that left cancelled Actions runs
+# when hosted runners could not be acquired. auto-release.yml dispatches it
+# instead, once, after CI passes on master.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.5.0, without the leading v)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and upload assets
+      id-token: write # keyless cosign signing via the OIDC token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags, to compute the next version
+
+      - name: Determine version
+        # `inputs.version` is attacker-influenced in the general case, so it goes
+        # through the environment rather than being interpolated into the script,
+        # where a value like `$(id)` would execute.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+            # Refuse anything that is not a plain semver: it becomes a git tag, a
+            # file name and an assembly version.
+            if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::version must look like 1.2.3 (got '$VERSION')"
+              exit 1
+            fi
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            echo "::error::release runs on tags or workflow_dispatch only"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "releasing v$VERSION"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish self-contained linux-x64 binaries
+        # Stamp the version into the binaries so `pinqops version` (and the UI
+        # footer) report the release, not the SDK default 1.0.0.
+        run: |
+          dotnet publish src/PinqOps.Cli \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:Version="$VERSION" \
+            -o ./publish
+          dotnet publish src/PinqOps.Web \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:Version="$VERSION" \
+            -o ./publish
+
+      # `pinqops update` replaces a binary that runs as root and talks to the
+      # Docker daemon, so it verifies the download against this manifest before
+      # swapping it in. Generated in the same job that built the binaries.
+      - name: Generate the checksum manifest
+        working-directory: ./publish
+        run: |
+          sha256sum pinqops pinqops-ui > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      # Keyless signing: the certificate is bound to this workflow's OIDC
+      # identity, so a signature proves the artifact came from this repository's
+      # release workflow rather than from someone who could write to the release.
+      # Verify with:
+      #   cosign verify-blob --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+      #     --certificate-identity-regexp 'https://github.com/pinqponq/pinqops/.*' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com SHA256SUMS
+      - name: Sign the checksum manifest
+        working-directory: ./publish
+        run: |
+          cosign sign-blob --yes \
+            --output-signature SHA256SUMS.sig \
+            --output-certificate SHA256SUMS.pem \
+            SHA256SUMS
+
+      - name: Generate an SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./publish
+          artifact-name: pinqops-sbom.spdx.json
+          output-file: ./publish/pinqops-sbom.spdx.json
+
+      - name: Attach binaries to the release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.VERSION }}
+          files: |
+            publish/pinqops
+            publish/pinqops-ui
+            publish/SHA256SUMS
+            publish/SHA256SUMS.sig
+            publish/SHA256SUMS.pem
+            publish/pinqops-sbom.spdx.json
