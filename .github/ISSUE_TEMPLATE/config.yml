@@ -1,5 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Security vulnerability
-    url: https://github.com/pinqponq/pinqops/security/advisories/new
-    about: Report security issues privately (see SECURITY.md), not as public issues.
